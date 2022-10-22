@@ -3,7 +3,6 @@ from pygame.constants import *
 import os
 from random import randint
 pg.init()
-pg.mixer.init()
 
 class Fish:
     def __init__(self, name):
@@ -11,7 +10,7 @@ class Fish:
         self.image = self.original_image.copy()
         self.procesing_image()
 
-    def procesing_image(self, in_less = 20, is_flip = False):
+    def procesing_image(self, in_less = 14, is_flip = False):
         self.image = pg.transform.scale(self.original_image, (self.original_image.get_width() // in_less // (1360 / WIDTH), \
                                                              self.original_image.get_height() // in_less // (720 / HEIGHT)))
         self.image = pg.transform.flip(self.image, flip_x = is_flip, flip_y = False)
@@ -25,9 +24,9 @@ class FishNPC(Fish, pg.sprite.Sprite):
         Fish.__init__(self, fish_NPC_names[randint(0, len(fish_NPC_names)-1)])
 
         player = fish_players_group.sprites()[randint(0, len(fish_players_group)-1)]
-        player_score_index = size_division_fish[player.score]
+        player_score_index = size_division_fish[player.round_score]
         self.score = size_division_fish[randint(max(0, player_score_index - 2), min(len(size_division_fish)-1, player_score_index + 2))]
-        self.procesing_image(in_less = 20-size_division_fish.index(self.score))
+        self.procesing_image(in_less = 14-size_division_fish.index(self.score))
 
         self.is_flip = randint(0, 1)
         self.rect = self.image.get_rect(top = randint(0, HEIGHT - self.image.get_height()), \
@@ -55,6 +54,7 @@ class FishPlayer(Fish, pg.sprite.Sprite):
         self.flip_fish = False #Надо ли повернуть рыбку в лево
         self.add(group)
         self.score = 0
+        self.round_score = 0 #Округленый счет до ближайшого меньшого в списке size_division.fishh
         self.id = fish_players_group.sprites().index(self)
 
         self.left = left
@@ -64,7 +64,7 @@ class FishPlayer(Fish, pg.sprite.Sprite):
 
     def update(self):
         text_score = font.render(f'Игрок {self.id + 1}: {self.score}', True, (255, 0, 0))
-        screen.blit(text_score, (0, self.id * (WIDTH - text_score.get_width())))
+        screen.blit(text_score,  (self.id * (WIDTH - text_score.get_width()), 0))
 
         keys_pressed = pg.key.get_pressed()
         if keys_pressed[self.right] and screen.get_rect().contains(self.rect.move(self.SPEED, 0)):
@@ -88,12 +88,16 @@ class FishPlayer(Fish, pg.sprite.Sprite):
     def eat(self):
         hits = pg.sprite.spritecollide(self, fishs_NPC_group, False)
         for hit in hits:
+            eat_sound.play()
             if self.score >= hit.score:
                 if hit.score > 0:
-                    self.score += hit.score // 4
+                    self.score += hit.score // 2
                 else:
-                    self.score += 10
+                    self.score += 20
                 hit.kill()
+                self.round_score = sorted(size_division_fish + [self.score]).index(self.score) - 1
+                if self.score in size_division_fish:
+                    self.procesing_image(in_less = 14 - size_division_fish.index(self.score), is_flip = self.is_flip_fish)
             else:
                 self.kill()
 
@@ -104,10 +108,12 @@ HEIGHT = pg.display.Info().current_h
 
 pg.mixer.music.load('sounds/music.mp3')
 pg.mixer.music.play(-1)
+pg.mixer.music.set_volume(0.7)
 eat_sound = pg.mixer.Sound('sounds/eat_sound.ogg')
+sound_fail = pg.mixer.Sound('sounds/fail.ogg')
 
 backgorund = pg.transform.scale(pg.image.load('images/background.jpg'), (WIDTH, HEIGHT))
-font = pg.font.Font(None, 36)
+font = pg.font.Font(None, 48)
 
 screen = pg.display.set_mode((WIDTH, HEIGHT), FULLSCREEN)
 clock = pg.time.Clock()
@@ -120,7 +126,7 @@ FishPlayer(fish_players_group, left = K_a, right = K_d, up = K_w, down = K_s)
 
 size_division_fish = []
 size_fish = 0
-while len(size_division_fish) < 20:
+while len(size_division_fish) < 14:
     if size_fish >= 100:
         size_division_fish.append(size_fish)
         size_fish *= 2
@@ -139,7 +145,7 @@ while True:
     screen.blit(backgorund, (0, 0))
 
     if len(fish_players_group) == 0:
-        quit()
+        break
 
     fishs_NPC_group.update()
     fish_players_group.update()
@@ -154,3 +160,6 @@ while True:
     fishs_NPC_group.draw(screen)
     fish_players_group.draw(screen)
     pg.display.update()
+sound_fail.play()
+pg.time.wait(4000)
+quit()
